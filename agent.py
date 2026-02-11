@@ -12,17 +12,34 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-if sys.version_info >= (3, 14):
-    raise SystemExit(
-        "Python 3.14 nao e suportado por parte das dependencias atuais deste projeto. "
-        "Use Python 3.11, 3.12 ou 3.13."
-    )
+UNSUPPORTED_PYTHON_FROM = (3, 14)
 
-from dotenv import load_dotenv
-from livekit import agents, rtc
-from livekit.agents import Agent, AgentSession, RoomInputOptions
-from livekit.agents.utils import images as lk_images
-from livekit.plugins import google, noise_cancellation
+
+def ensure_supported_python_version() -> None:
+    """Bloqueia execucao em versoes de Python nao suportadas pelas dependencias."""
+    # Usa parsing dinamico de sys.version para evitar otimizar analise estatica no editor.
+    major_str, minor_str, *_ = sys.version.split()[0].split(".")
+    current = (int(major_str), int(minor_str))
+    if current >= UNSUPPORTED_PYTHON_FROM:
+        raise SystemExit(
+            "Python 3.14 nao e suportado por parte das dependencias atuais deste projeto. "
+            "Use Python 3.11, 3.12 ou 3.13."
+        )
+
+ensure_supported_python_version()
+
+try:
+    from dotenv import load_dotenv
+    from livekit import agents, rtc
+    from livekit.agents import Agent, AgentSession, RoomInputOptions
+    from livekit.agents.utils import images as lk_images
+    from livekit.plugins import google, noise_cancellation
+except ModuleNotFoundError as exc:
+    missing = getattr(exc, "name", "dependencia")
+    raise SystemExit(
+        f"Dependencia ausente: {missing}. "
+        "Ative o ambiente virtual .venv311 e execute `pip install -r requirements.txt`."
+    ) from exc
 
 from memory_system import MemorySystem
 from prompts import AGENT_INSTRUCTION, SESSION_INSTRUCTION
@@ -582,6 +599,7 @@ class OptimizedAssistant(Agent):
 
 
 async def entrypoint(ctx: agents.JobContext) -> None:
+    ensure_supported_python_version()
     logger = configure_logging()
     config = load_runtime_config()
     frame_buffer = FrameSnapshotBuffer()
@@ -643,6 +661,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
 
 if __name__ == "__main__":
+    ensure_supported_python_version()
     load_dotenv()
     logger = configure_logging()
 

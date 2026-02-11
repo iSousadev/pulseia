@@ -5,7 +5,6 @@ Valida funcionamento básico sem precisar do LiveKit
 
 import asyncio
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 
 # Carrega variáveis de ambiente
@@ -248,7 +247,7 @@ def main():
         print("✅ TODOS OS TESTES PASSARAM!")
         print("=" * 60)
         print("\n🚀 Sistema pronto para uso. Execute:")
-        print("   python enhanced_agent.py")
+        print("   python agent.py")
         
     except Exception as e:
         print(f"\n❌ ERRO NOS TESTES: {e}")

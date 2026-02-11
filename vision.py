@@ -5,11 +5,9 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Optional, List
-from io import BytesIO
 
 from google import genai
 from google.genai import types
-from PIL import Image
 
 logger = logging.getLogger("pulse_agent.vision")
 

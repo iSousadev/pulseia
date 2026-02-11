@@ -87,6 +87,18 @@ python test_system.py
 python test_improvements.py
 ```
 
+## VS Code / Pylance (imports nao resolvidos)
+
+Se aparecer `reportMissingImports` para `dotenv`, `livekit` ou `PIL`, normalmente o VS Code esta usando o Python global (3.14) em vez do venv do projeto.
+
+1. Abra o Command Palette (`Ctrl+Shift+P`)
+2. Execute `Python: Select Interpreter`
+3. Selecione `Project\\.venv311\\Scripts\\python.exe`
+4. Execute `Pylance: Restart Language Server`
+5. Execute `Developer: Reload Window`
+
+Observacao: este repositorio inclui `pyrightconfig.json` para ajudar a resolucao de imports no workspace.
+
 ## Ferramentas de memoria
 
 ```powershell
@@ -101,6 +113,17 @@ python memory_cli.py search default_user "fastapi"
 ### Erro de Python 3.14
 
 Use Python 3.11/3.12/3.13. O `agent.py` encerra com mensagem clara quando executado em 3.14.
+
+### Erro "Nao foi possivel resolver a importacao ..."
+
+Ative o venv e confirme as dependencias:
+
+```powershell
+.\.venv311\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Depois selecione o interpretador correto no VS Code (`.venv311\\Scripts\\python.exe`).
 
 ### Erro de variaveis obrigatorias
 
@@ -128,3 +151,5 @@ As vozes dependem do modelo do Google. A assinatura atual do projeto esta fixa p
 - Tratamento mais seguro de tasks assincronas para evitar falhas silenciosas em background.
 - Ajustes de compatibilidade na chamada de visao para SDK atual em `vision.py`.
 - Suite `test_improvements.py` atualizada para os modulos e configuracoes atuais.
+- Guardas de runtime para Python 3.14 com mensagens de erro mais diretas.
+- Limpeza de codigo legado e imports nao utilizados em scripts auxiliares.

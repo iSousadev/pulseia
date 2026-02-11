@@ -2,20 +2,25 @@
 """Suite de validacao das melhorias do PULSE."""
 
 import asyncio
+import importlib
 import os
+import sys
 import time
 from dataclasses import dataclass
-from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
+def is_supported_python_for_runtime() -> bool:
+    return (sys.version_info.major, sys.version_info.minor) < (3, 14)
+
+
 @dataclass
 class TestResult:
     name: str
-    status: str  # pass | fail | skip
+    status: str  
     details: str = ""
 
 
@@ -40,14 +45,22 @@ def test_static_integrity() -> list[TestResult]:
     banner("TESTE 1: INTEGRIDADE ESTATICA")
     results: list[TestResult] = []
 
-    try:
-        import agent  # noqa: F401
-        import prompts  # noqa: F401
-        import reasoning_system  # noqa: F401
-        import vision  # noqa: F401
-        results.append(TestResult("Imports principais", "pass"))
-    except Exception as exc:
-        results.append(TestResult("Imports principais", "fail", str(exc)))
+    if not is_supported_python_for_runtime():
+        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        results.append(
+            TestResult(
+                "Imports principais",
+                "skip",
+                f"Python {py_ver} nao suportado para runtime. Use .venv311 (3.11).",
+            )
+        )
+    else:
+        try:
+            for module_name in ("agent", "prompts", "reasoning_system", "vision"):
+                importlib.import_module(module_name)
+            results.append(TestResult("Imports principais", "pass"))
+        except BaseException as exc:
+            results.append(TestResult("Imports principais", "fail", str(exc)))
 
     try:
         from prompts import AGENT_INSTRUCTION, SESSION_INSTRUCTION
@@ -67,6 +80,19 @@ def test_static_integrity() -> list[TestResult]:
 async def test_reasoning_runtime() -> list[TestResult]:
     banner("TESTE 2: REASONING RUNTIME")
     results: list[TestResult] = []
+
+    if not is_supported_python_for_runtime():
+        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        results.append(
+            TestResult(
+                "Runtime de reasoning",
+                "skip",
+                f"Python {py_ver} nao suportado. Execute com .venv311 (3.11).",
+            )
+        )
+        for res in results:
+            print_result(res)
+        return results
 
     if not os.getenv("GOOGLE_API_KEY"):
         results.append(TestResult("GOOGLE_API_KEY configurada", "skip", "Sem chave, teste de runtime ignorado."))
@@ -142,6 +168,19 @@ async def test_reasoning_runtime() -> list[TestResult]:
 async def test_vision_runtime() -> list[TestResult]:
     banner("TESTE 3: VISAO RUNTIME")
     results: list[TestResult] = []
+
+    if not is_supported_python_for_runtime():
+        py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+        results.append(
+            TestResult(
+                "Runtime de visao",
+                "skip",
+                f"Python {py_ver} nao suportado. Execute com .venv311 (3.11).",
+            )
+        )
+        for res in results:
+            print_result(res)
+        return results
 
     if not os.getenv("GOOGLE_API_KEY"):
         results.append(TestResult("GOOGLE_API_KEY configurada", "skip", "Sem chave, teste de runtime ignorado."))

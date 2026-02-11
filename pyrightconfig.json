@@ -1,0 +1,19 @@
+{
+  "venvPath": ".",
+  "venv": ".venv311",
+  "include": [
+    "."
+  ],
+  "exclude": [
+    ".venv311",
+    "**/__pycache__"
+  ],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "."
+      ]
+    }
+  ]
+}
