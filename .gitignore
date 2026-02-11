@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+.venv311/
+venv/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Logs and runtime artifacts
+KMS/logs/
+KMS/memory/
+*.log
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

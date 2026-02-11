@@ -1,0 +1,17 @@
+# Observacao de compatibilidade:
+# - Use Python 3.11, 3.12 ou 3.13
+# - Python 3.14 nao suportado neste projeto no momento
+
+# Dependencias base
+livekit-agents==1.4.1
+livekit-plugins-google==1.4.1
+livekit-plugins-noise-cancellation==0.2.5
+python-dotenv==1.2.1
+
+# Memoria e reasoning
+chromadb==0.4.22
+sentence-transformers==2.3.1
+google-genai>=1.62.0,<2.0.0
+
+# Utilidades
+numpy==1.26.4
