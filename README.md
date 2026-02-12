@@ -1,4 +1,4 @@
-# pulseia
+# PULSE IA beta
 
 Monorepo com backend Python (agente PULSE) + frontend React (interface de voz).
 
