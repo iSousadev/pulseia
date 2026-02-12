@@ -7,9 +7,15 @@ import logging
 import json
 import sys
 from typing import Dict, List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import hashlib
+import re
+import time
+from urllib.error import URLError
+from urllib.parse import quote_plus
+from urllib.request import Request, urlopen
+import xml.etree.ElementTree as ET
 
 if sys.version_info >= (3, 14):
     raise RuntimeError(
@@ -39,6 +45,193 @@ class ReasoningResult:
     tools_used: Optional[List[Dict]] = None
     confidence: float = 1.0
     execution_time_ms: int = 0
+
+
+@dataclass
+class RealtimeContext:
+    """Contexto de busca atualizado para perguntas sensiveis a data."""
+    text: str = ""
+    sources: List[Dict[str, str]] = field(default_factory=list)
+
+
+class RealtimeSearchService:
+    """Busca leve em fontes publicas para reduzir respostas desatualizadas."""
+
+    TIME_SENSITIVE_PATTERNS = [
+        r"\bhoje\b",
+        r"\bagora\b",
+        r"\batual\b",
+        r"\bultim[oa]s?\b",
+        r"\blatest\b",
+        r"\bnews?\b",
+        r"\bpreco\b",
+        r"\bcotacao\b",
+        r"\bversao\b",
+        r"\b202[4-9]\b",
+        r"\b20[3-9][0-9]\b",
+    ]
+
+    def __init__(self):
+        enabled_raw = os.getenv("PULSE_REALTIME_SEARCH_ENABLED", "true").strip().lower()
+        self.enabled = enabled_raw in {"1", "true", "yes", "on"}
+        self.max_results = self._parse_int("PULSE_REALTIME_SEARCH_MAX_RESULTS", default=3, min_value=1, max_value=5)
+        self.cache_ttl_seconds = self._parse_int(
+            "PULSE_REALTIME_SEARCH_CACHE_TTL_SECONDS",
+            default=600,
+            min_value=60,
+            max_value=3600,
+        )
+        self._cache: Dict[str, tuple[float, RealtimeContext]] = {}
+        self._headers = {"User-Agent": "PULSE-Agent/1.0 (realtime-search)"}
+
+    @staticmethod
+    def _parse_int(name: str, *, default: int, min_value: int, max_value: int) -> int:
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        return max(min_value, min(max_value, value))
+
+    def should_search(self, user_input: str) -> bool:
+        if not self.enabled:
+            return False
+        text = user_input.lower()
+        return any(re.search(pattern, text) for pattern in self.TIME_SENSITIVE_PATTERNS)
+
+    def get_context(self, user_input: str) -> RealtimeContext:
+        if not self.should_search(user_input):
+            return RealtimeContext()
+
+        key = user_input.strip().lower()
+        now = time.time()
+        cached = self._cache.get(key)
+        if cached and cached[0] > now:
+            return cached[1]
+
+        snippets = self._search_news_rss(user_input)
+        if not snippets:
+            snippets = self._search_duckduckgo(user_input)
+
+        if not snippets:
+            context = RealtimeContext()
+            self._cache[key] = (now + self.cache_ttl_seconds, context)
+            return context
+
+        lines = []
+        sources: List[Dict[str, str]] = []
+        for item in snippets[: self.max_results]:
+            title = item.get("title", "").strip()
+            url = item.get("url", "").strip()
+            published = item.get("published_at", "").strip()
+            if not title or not url:
+                continue
+            line = f"- {title}"
+            if published:
+                line += f" ({published})"
+            line += f" | {url}"
+            lines.append(line)
+            sources.append(
+                {
+                    "title": title,
+                    "url": url,
+                    "published_at": published,
+                }
+            )
+
+        if not lines:
+            context = RealtimeContext()
+            self._cache[key] = (now + self.cache_ttl_seconds, context)
+            return context
+
+        built = RealtimeContext(
+            text=(
+                "CONTEXTO EXTERNO ATUALIZADO (use somente como referencia factual):\n"
+                + "\n".join(lines)
+                + f"\nColetado em: {datetime.now().isoformat(timespec='seconds')}"
+            ),
+            sources=sources,
+        )
+        self._cache[key] = (now + self.cache_ttl_seconds, built)
+        return built
+
+    def _search_news_rss(self, query: str) -> List[Dict[str, str]]:
+        url = f"https://news.google.com/rss/search?q={quote_plus(query)}"
+        req = Request(url, headers=self._headers)
+        try:
+            with urlopen(req, timeout=5) as resp:
+                content = resp.read()
+        except (TimeoutError, URLError, OSError):
+            return []
+
+        try:
+            root = ET.fromstring(content)
+        except ET.ParseError:
+            return []
+
+        items = []
+        for item in root.findall(".//item"):
+            title = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            pub_date = (item.findtext("pubDate") or "").strip()
+            if not title or not link:
+                continue
+            items.append(
+                {
+                    "title": title,
+                    "url": link,
+                    "published_at": pub_date,
+                }
+            )
+            if len(items) >= self.max_results:
+                break
+        return items
+
+    def _search_duckduckgo(self, query: str) -> List[Dict[str, str]]:
+        url = f"https://api.duckduckgo.com/?q={quote_plus(query)}&format=json&no_redirect=1&no_html=1"
+        req = Request(url, headers=self._headers)
+        try:
+            with urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+        except (TimeoutError, URLError, OSError, json.JSONDecodeError):
+            return []
+
+        items: List[Dict[str, str]] = []
+
+        abstract_text = str(data.get("AbstractText", "")).strip()
+        abstract_url = str(data.get("AbstractURL", "")).strip()
+        if abstract_text and abstract_url:
+            items.append(
+                {
+                    "title": abstract_text[:160],
+                    "url": abstract_url,
+                    "published_at": "",
+                }
+            )
+
+        related_topics = data.get("RelatedTopics", []) or []
+        for topic in related_topics:
+            if "Topics" in topic:
+                nested_topics = topic.get("Topics", []) or []
+            else:
+                nested_topics = [topic]
+            for entry in nested_topics:
+                text = str(entry.get("Text", "")).strip()
+                first_url = str(entry.get("FirstURL", "")).strip()
+                if not text or not first_url:
+                    continue
+                items.append(
+                    {
+                        "title": text[:160],
+                        "url": first_url,
+                        "published_at": "",
+                    }
+                )
+                if len(items) >= self.max_results:
+                    return items
+        return items
 
 
 class ResponseCache:
@@ -79,6 +272,7 @@ class GeminiReasoningSystem:
 
         self.client = genai.Client(api_key=api_key)
         self.cache = ResponseCache(max_size=50)
+        self.realtime_search = RealtimeSearchService()
 
         # OTIMIZAÃƒâ€¡ÃƒÆ’O: Usar mesmo modelo para ambos (mais rÃƒÂ¡pido)
         self.fast_model = "gemini-2.0-flash-exp"
@@ -129,16 +323,43 @@ class GeminiReasoningSystem:
         mode = force_mode if force_mode else self._select_mode(user_input)
         logger.info("Processando com modo: %s", mode.value)
 
+        realtime_context = RealtimeContext()
+        if self.realtime_search.should_search(user_input):
+            try:
+                realtime_context = await asyncio.to_thread(
+                    self.realtime_search.get_context,
+                    user_input,
+                )
+                if realtime_context.text:
+                    logger.info(
+                        "Contexto atualizado obtido (%s fontes).",
+                        len(realtime_context.sources),
+                    )
+            except Exception as exc:
+                logger.warning("Falha ao buscar contexto atualizado: %s", exc)
+                realtime_context = RealtimeContext()
+
         if mode == ReasoningMode.VOICE_FAST:
-            result = await self._fast_response(user_input, context)
+            result = await self._fast_response(user_input, context, realtime_context)
         else:
-            result = await self._deep_reasoning(user_input, context)
+            result = await self._deep_reasoning(user_input, context, realtime_context)
 
         result.execution_time_ms = int((time.time() - start_time) * 1000)
         
         # OTIMIZAÃƒâ€¡ÃƒÆ’O: Salva no cache
         if not force_mode and result.confidence > 0.7:
             self.cache.set(user_input, result)
+
+        if realtime_context.sources:
+            if not result.tools_used:
+                result.tools_used = []
+            result.tools_used.append(
+                {
+                    "type": "realtime_search",
+                    "source_count": len(realtime_context.sources),
+                    "sources": realtime_context.sources,
+                }
+            )
         
         logger.info(
             "Processamento concluido em %sms (modo: %s)",
@@ -201,9 +422,14 @@ class GeminiReasoningSystem:
 
         logger.debug("Complexity score: %s -> VOICE_FAST", complexity_score)
         return ReasoningMode.VOICE_FAST
-    async def _fast_response(self, user_input: str, context: str) -> ReasoningResult:
+    async def _fast_response(
+        self,
+        user_input: str,
+        context: str,
+        realtime_context: RealtimeContext,
+    ) -> ReasoningResult:
         """Resposta rapida sem reasoning profundo."""
-        prompt = self._build_fast_prompt(user_input, context)
+        prompt = self._build_fast_prompt(user_input, context, realtime_context)
 
         try:
             response = await asyncio.to_thread(
@@ -227,9 +453,14 @@ class GeminiReasoningSystem:
                 confidence=0.0,
             )
 
-    async def _deep_reasoning(self, user_input: str, context: str) -> ReasoningResult:
+    async def _deep_reasoning(
+        self,
+        user_input: str,
+        context: str,
+        realtime_context: RealtimeContext,
+    ) -> ReasoningResult:
         """Raciocinio profundo com thinking e code execution."""
-        prompt = self._build_reasoning_prompt(user_input, context)
+        prompt = self._build_reasoning_prompt(user_input, context, realtime_context)
 
         try:
             response = await asyncio.to_thread(
@@ -271,16 +502,30 @@ class GeminiReasoningSystem:
             )
         except Exception as e:
             logger.error("Erro no deep reasoning: %s", e)
-            return await self._fast_response(user_input, context)
+            return await self._fast_response(user_input, context, realtime_context)
 
-    def _build_fast_prompt(self, user_input: str, context: str) -> str:
+    def _build_fast_prompt(
+        self,
+        user_input: str,
+        context: str,
+        realtime_context: RealtimeContext,
+    ) -> str:
         """Monta prompt para resposta rapida."""
         from prompts import AGENT_INSTRUCTION
+
+        realtime_block = ""
+        if realtime_context.text:
+            realtime_block = (
+                "\n\n---\n"
+                f"{realtime_context.text}\n"
+                "Se houver conflito com memoria antiga, priorize o contexto atualizado.\n"
+            )
 
         return f"""
 {AGENT_INSTRUCTION}
 
 {context}
+{realtime_block}
 
 ---
 
@@ -289,14 +534,28 @@ Responda de forma DIRETA, NATURAL e CASUAL. Sem formalidades.
 Usuario: {user_input}
 """.strip()
 
-    def _build_reasoning_prompt(self, user_input: str, context: str) -> str:
+    def _build_reasoning_prompt(
+        self,
+        user_input: str,
+        context: str,
+        realtime_context: RealtimeContext,
+    ) -> str:
         """Monta prompt para raciocinio profundo."""
         from prompts import AGENT_INSTRUCTION
+
+        realtime_block = ""
+        if realtime_context.text:
+            realtime_block = (
+                "\n\n---\n"
+                f"{realtime_context.text}\n"
+                "Use o contexto atualizado para fatos temporais e deixe isso claro na resposta.\n"
+            )
 
         return f"""
 {AGENT_INSTRUCTION}
 
 {context}
+{realtime_block}
 
 ---
 

@@ -19,6 +19,7 @@ Projeto de assistente de voz baseado em LiveKit com:
 - `memory_system.py` - memoria persistente
 - `reasoning_system.py` - roteamento de raciocinio
 - `vision.py` - analise de imagem e triggers de visao
+- `token_server.py` - endpoint HTTP para gerar token LiveKit ao frontend
 - `test_system.py` - testes de memoria/reasoning
 - `test_improvements.py` - validacao das melhorias recentes
 - `memory_cli.py` - utilitarios de memoria
@@ -52,6 +53,10 @@ PULSE_VIDEO_ENABLED=true
 PULSE_VISION_ENABLED=true
 PULSE_MEMORY_ENABLED=true
 PULSE_REASONING_ENABLED=true
+
+# Opcional: token server para frontend React
+LIVEKIT_DEFAULT_ROOM=pulse-room
+CORS_ALLOWED_ORIGINS=http://localhost:8080
 ```
 
 ## Como rodar
@@ -86,6 +91,14 @@ python test_system.py
 ```powershell
 python test_improvements.py
 ```
+
+### 6) Rodar token server (frontend React)
+
+```powershell
+python token_server.py
+```
+
+Endpoint padrao: `http://localhost:8787/api/livekit/token`
 
 ## VS Code / Pylance (imports nao resolvidos)
 
