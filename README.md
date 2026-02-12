@@ -99,8 +99,3 @@ Abra `http://localhost:8080`.
 - `ERR_CONNECTION_REFUSED` em `/api/livekit/token`: `token_server.py` nao esta rodando.
 - `Falha ao obter token LiveKit (404)`: endpoint errado em `VITE_LIVEKIT_TOKEN_ENDPOINT`.
 - `Conectado. Aguardando agente entrar na sala...`: subir `python agent.py start`.
-
-## Arquivos sensiveis
-
-- `.env` nao e versionado.
-- `LIVEKIT_API_SECRET` fica somente no backend.
