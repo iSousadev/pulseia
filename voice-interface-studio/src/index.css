@@ -1,0 +1,246 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+
+    --card: 0 0% 4%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 4%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 0 0% 9%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 0 0% 75%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 0 0% 22%;
+    --input: 0 0% 18%;
+    --ring: 0 0% 100%;
+
+    --radius: 0.75rem;
+
+    --glow-primary: 0 0% 100%;
+    --glow-accent: 0 0% 85%;
+    --glow-warning: 38 92% 55%;
+    --glow-success: 142 70% 45%;
+
+    --sidebar-background: 0 0% 4%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 10%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  code, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .glow-primary {
+    box-shadow: 0 0 24px hsl(var(--glow-primary) / 0.3), 0 0 70px hsl(var(--glow-primary) / 0.12);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 20px hsl(var(--glow-accent) / 0.22), 0 0 60px hsl(var(--glow-accent) / 0.1);
+  }
+
+  .glow-ring {
+    box-shadow: 0 0 0 1px hsl(var(--glow-primary) / 0.58), 0 0 18px hsl(var(--glow-primary) / 0.2);
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, hsl(var(--foreground)), hsl(var(--muted-foreground)));
+  }
+
+  .glass {
+    @apply bg-card/60 backdrop-blur-xl border border-border/50;
+  }
+
+  .glass-strong {
+    @apply bg-card/80 backdrop-blur-2xl border border-border/60;
+  }
+}
+
+@keyframes bar-wave {
+  0%, 100% { height: 6px; }
+  50% { height: 24px; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px hsl(var(--glow-primary) / 0.3); }
+  50% { box-shadow: 0 0 40px hsl(var(--glow-primary) / 0.5), 0 0 80px hsl(var(--glow-primary) / 0.2); }
+}
+
+@keyframes pulse-ring {
+  0% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% { 
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+@keyframes splash-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes splash-pulse-slow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.02); }
+}
+
+.animate-splash-float {
+  animation: splash-float 6s ease-in-out infinite;
+}
+
+.splash-metallic {
+  background: linear-gradient(to bottom, #ffffff 0%, #d1d1d1 52%, #b8b8b8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 30px rgba(255, 255, 255, 0.12);
+}
+
+.splash-scanlines {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  opacity: 0.15;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.2) 50%,
+    rgba(0, 0, 0, 0.2)
+  );
+  background-size: 100% 4px;
+}
+
+.splash-noise {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='1'/%3E%3C/svg%3E");
+}
+
+.splash-beta-glow {
+  background-color: #ffd700;
+  animation: splash-pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes splash-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes splash-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.splash-fade {
+  opacity: 0;
+  animation: splash-fade-in 0.7s ease-out forwards;
+}
+
+.splash-fade-up {
+  opacity: 0;
+  animation: splash-fade-in-up 0.8s ease-out forwards;
+}
+
+.splash-delay-1 { animation-delay: 0.1s; }
+.splash-delay-2 { animation-delay: 0.22s; }
+.splash-delay-3 { animation-delay: 0.34s; }
+.splash-delay-4 { animation-delay: 0.48s; }
+.splash-delay-5 { animation-delay: 0.62s; }
+
+@keyframes splash-glitch-base {
+  0%, 91%, 100% { transform: translate(0, 0); }
+  92% { transform: translate(1px, 0); }
+  93% { transform: translate(-1px, 0); }
+  94% { transform: translate(0, 0); }
+}
+
+@keyframes splash-glitch-cyan {
+  0%, 91%, 100% { opacity: 0; transform: translate(0, 0); }
+  92% { opacity: 0.8; transform: translate(3px, -1px); }
+  93% { opacity: 0.75; transform: translate(-2px, 1px); }
+  94% { opacity: 0; transform: translate(0, 0); }
+}
+
+@keyframes splash-glitch-red {
+  0%, 91%, 100% { opacity: 0; transform: translate(0, 0); }
+  92% { opacity: 0.72; transform: translate(-3px, 1px); }
+  93% { opacity: 0.66; transform: translate(2px, -1px); }
+  94% { opacity: 0; transform: translate(0, 0); }
+}
+
+.splash-glitch-base {
+  display: inline-block;
+  animation: splash-glitch-base 2.4s steps(1, end) infinite;
+}
+
+.splash-glitch-cyan {
+  color: rgba(103, 232, 249, 0.9);
+  text-shadow: 0 0 14px rgba(103, 232, 249, 0.65);
+  animation: splash-glitch-cyan 2.4s steps(1, end) infinite;
+  pointer-events: none;
+}
+
+.splash-glitch-red {
+  color: rgba(251, 113, 133, 0.86);
+  text-shadow: 0 0 14px rgba(251, 113, 133, 0.6);
+  animation: splash-glitch-red 2.4s steps(1, end) infinite;
+  pointer-events: none;
+}

@@ -1,168 +1,106 @@
-﻿# PULSE - LiveKit Agent com Memoria, Reasoning e Visao
+# pulseia
 
-Projeto de assistente de voz baseado em LiveKit com:
-- Memoria persistente (ChromaDB)
-- Reasoning adaptativo (Gemini)
-- Visao computacional (Gemini Vision)
-- Prompt customizavel
+Monorepo com backend Python (agente PULSE) + frontend React (interface de voz).
+
+## Estrutura
+
+- `agent.py` - agente LiveKit (voz + memoria + reasoning + visao)
+- `token_server.py` - servidor HTTP que gera token/dispatch do LiveKit
+- `voice-interface-studio/` - frontend React + Vite
 
 ## Requisitos
 
-- Python 3.11, 3.12 ou 3.13
-- Python 3.14 nao suportado neste projeto (dependencias ainda instaveis)
-- Conta LiveKit e Google API Key
+- Python 3.11, 3.12 ou 3.13 (nao usar 3.14)
+- Node.js 18+
+- Conta LiveKit Cloud
+- `GOOGLE_API_KEY`
 
-## Estrutura principal
+## 1) Configurar backend (`.env`)
 
-- `agent.py` - entrypoint do agente
-- `prompts.py` - instrucoes do comportamento
-- `memory_system.py` - memoria persistente
-- `reasoning_system.py` - roteamento de raciocinio
-- `vision.py` - analise de imagem e triggers de visao
-- `token_server.py` - endpoint HTTP para gerar token LiveKit ao frontend
-- `test_system.py` - testes de memoria/reasoning
-- `test_improvements.py` - validacao das melhorias recentes
-- `memory_cli.py` - utilitarios de memoria
+Copie `.env.example` para `.env` na raiz do projeto e preencha:
 
-## Setup rapido (Windows)
+```env
+LIVEKIT_URL=wss://SEU_PROJETO.livekit.cloud
+LIVEKIT_API_KEY=SUA_API_KEY
+LIVEKIT_API_SECRET=SUA_API_SECRET
+GOOGLE_API_KEY=SUA_GOOGLE_API_KEY
+
+LIVEKIT_DEFAULT_ROOM=pulse-room
+CORS_ALLOWED_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
+```
+
+## 2) Configurar frontend (`voice-interface-studio/.env`)
+
+Crie `voice-interface-studio/.env`:
+
+```env
+VITE_LIVEKIT_URL=wss://SEU_PROJETO.livekit.cloud
+VITE_LIVEKIT_TOKEN_ENDPOINT=http://localhost:8787/api/livekit/token
+VITE_LIVEKIT_ROOM=pulse-room
+```
+
+## 3) Instalar dependencias
+
+### Backend
 
 ```powershell
-cd "C:\Users\rodol\OneDrive\Area de Trabalho\JarvisBot\Project"
-
-# criar venv com Python 3.11
+cd Project
 py -3.11 -m venv .venv311
 .\.venv311\Scripts\Activate.ps1
-
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-## Configuracao de ambiente
-
-1. Copie `.env.example` para `.env`
-2. Preencha valores reais:
-
-```env
-LIVEKIT_URL=wss://...
-LIVEKIT_API_KEY=...
-LIVEKIT_API_SECRET=...
-GOOGLE_API_KEY=...
-
-PULSE_TEMPERATURE=0.7
-PULSE_VIDEO_ENABLED=true
-PULSE_VISION_ENABLED=true
-PULSE_MEMORY_ENABLED=true
-PULSE_REASONING_ENABLED=true
-
-# Opcional: token server para frontend React
-LIVEKIT_DEFAULT_ROOM=pulse-room
-CORS_ALLOWED_ORIGINS=http://localhost:8080
-```
-
-## Como rodar
-
-### 1) Baixar assets do plugin
+### Frontend
 
 ```powershell
-python agent.py download-files
+cd Project\voice-interface-studio
+npm install
 ```
 
-### 2) Rodar em desenvolvimento
+## 4) Rodar sem erro (ordem obrigatoria)
+
+Use 3 terminais:
+
+### Terminal A - Token server
 
 ```powershell
-python agent.py dev
-```
-
-### 3) Rodar em console local (microfone)
-
-```powershell
-python agent.py console --list-devices
-python agent.py console --input-device "Logitech G733"
-```
-
-### 4) Rodar testes de memoria/reasoning
-
-```powershell
-python test_system.py
-```
-
-### 5) Rodar validacao das melhorias
-
-```powershell
-python test_improvements.py
-```
-
-### 6) Rodar token server (frontend React)
-
-```powershell
+cd Project
+.\.venv311\Scripts\Activate.ps1
 python token_server.py
 ```
 
-Endpoint padrao: `http://localhost:8787/api/livekit/token`
-
-## VS Code / Pylance (imports nao resolvidos)
-
-Se aparecer `reportMissingImports` para `dotenv`, `livekit` ou `PIL`, normalmente o VS Code esta usando o Python global (3.14) em vez do venv do projeto.
-
-1. Abra o Command Palette (`Ctrl+Shift+P`)
-2. Execute `Python: Select Interpreter`
-3. Selecione `Project\\.venv311\\Scripts\\python.exe`
-4. Execute `Pylance: Restart Language Server`
-5. Execute `Developer: Reload Window`
-
-Observacao: este repositorio inclui `pyrightconfig.json` para ajudar a resolucao de imports no workspace.
-
-## Ferramentas de memoria
+Healthcheck:
 
 ```powershell
-python memory_cli.py list
-python memory_cli.py stats default_user
-python memory_cli.py context default_user
-python memory_cli.py search default_user "fastapi"
+curl http://localhost:8787/health
 ```
 
-## Troubleshooting
-
-### Erro de Python 3.14
-
-Use Python 3.11/3.12/3.13. O `agent.py` encerra com mensagem clara quando executado em 3.14.
-
-### Erro "Nao foi possivel resolver a importacao ..."
-
-Ative o venv e confirme as dependencias:
+### Terminal B - Agente
 
 ```powershell
+cd Project
 .\.venv311\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python agent.py start
 ```
 
-Depois selecione o interpretador correto no VS Code (`.venv311\\Scripts\\python.exe`).
+### Terminal C - Frontend
 
-### Erro de variaveis obrigatorias
+```powershell
+cd Project\voice-interface-studio
+npm run dev
+```
 
-Confirme se `.env` tem:
-- `LIVEKIT_URL`
-- `LIVEKIT_API_KEY`
-- `LIVEKIT_API_SECRET`
-- `GOOGLE_API_KEY`
-- `PULSE_VIDEO_ENABLED`
-- `PULSE_VISION_ENABLED`
+Abra `http://localhost:8080`.
 
-### Erro de voz
+## Troubleshooting rapido
 
-As vozes dependem do modelo do Google. A assinatura atual do projeto esta fixa para `Pulcherrima`.
+- `VITE_LIVEKIT_URL nao configurada`: faltou `voice-interface-studio/.env`.
+- `ERR_CONNECTION_REFUSED` em `/api/livekit/token`: `token_server.py` nao esta rodando.
+- `Falha ao obter token LiveKit (404)`: endpoint errado em `VITE_LIVEKIT_TOKEN_ENDPOINT`.
+- `Conectado. Aguardando agente entrar na sala...`: subir `python agent.py start`.
 
-## Logs
+## Arquivos sensiveis
 
-- `KMS/logs/pulse_agent.log`
-- `KMS/logs/reasoning_analytics.jsonl`
-
-## Atualizacoes recentes
-
-- Fluxo de visao/reasoning integrado ao runtime principal em `agent.py`.
-- Gravacao de memoria mais robusta com recuperacao automatica de sessao quando necessario.
-- Tratamento mais seguro de tasks assincronas para evitar falhas silenciosas em background.
-- Ajustes de compatibilidade na chamada de visao para SDK atual em `vision.py`.
-- Suite `test_improvements.py` atualizada para os modulos e configuracoes atuais.
-- Guardas de runtime para Python 3.14 com mensagens de erro mais diretas.
-- Limpeza de codigo legado e imports nao utilizados em scripts auxiliares.
+- `.env` nao e versionado.
+- `LIVEKIT_API_SECRET` fica somente no backend.

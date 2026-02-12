@@ -16,6 +16,12 @@ venv/
 .env.*
 !.env.example
 
+# Frontend artifacts
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+
 # Logs and runtime artifacts
 KMS/logs/
 KMS/memory/
