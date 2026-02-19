@@ -44,6 +44,7 @@ except ModuleNotFoundError as exc:
 from memory_system import MemorySystem
 from prompts import AGENT_INSTRUCTION, SESSION_INSTRUCTION
 from reasoning_system import ReasoningMode, get_reasoning_system
+from temporal_context import build_temporal_guardrail
 from vision import get_vision_system
 
 load_dotenv()
@@ -303,7 +304,7 @@ class OptimizedAssistant(Agent):
         self.logger.info("OptimizedAssistant inicializado para usuario %s", user_id)
 
     def _build_enhanced_instruction(self) -> str:
-        parts = [AGENT_INSTRUCTION]
+        parts = [AGENT_INSTRUCTION, "\n---\n", build_temporal_guardrail()]
 
         if self.memory_context:
             parts.append("\n---\n")

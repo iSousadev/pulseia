@@ -12,6 +12,7 @@ from enum import Enum
 import hashlib
 import re
 import time
+import unicodedata
 from urllib.error import URLError
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
@@ -61,15 +62,31 @@ class RealtimeSearchService:
         r"\bhoje\b",
         r"\bagora\b",
         r"\batual\b",
+        r"\batualizado\b",
+        r"\brecente\b",
         r"\bultim[oa]s?\b",
+        r"\bessa semana\b",
+        r"\beste mes\b",
+        r"\bultimos?\s+\d+\s+(dias|semanas|meses)\b",
         r"\blatest\b",
         r"\bnews?\b",
+        r"\brelease\b",
+        r"\blancamento\b",
+        r"\bchangelog\b",
+        r"\bbreaking changes?\b",
         r"\bpreco\b",
         r"\bcotacao\b",
         r"\bversao\b",
-        r"\b202[4-9]\b",
+        r"\bpresidente\b",
+        r"\bceo\b",
+        r"\blei\b",
+        r"\bdecreto\b",
+        r"\bregulacao\b",
+        r"\broadmap\b",
+        r"\b202[5-9]\b",
         r"\b20[3-9][0-9]\b",
     ]
+    YEAR_PATTERN = re.compile(r"\b(20\d{2})\b")
 
     def __init__(self):
         enabled_raw = os.getenv("PULSE_REALTIME_SEARCH_ENABLED", "true").strip().lower()
@@ -95,11 +112,25 @@ class RealtimeSearchService:
             return default
         return max(min_value, min(max_value, value))
 
+    @staticmethod
+    def _normalize_for_match(value: str) -> str:
+        normalized = unicodedata.normalize("NFKD", value)
+        ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+        return ascii_only.lower()
+
     def should_search(self, user_input: str) -> bool:
         if not self.enabled:
             return False
-        text = user_input.lower()
-        return any(re.search(pattern, text) for pattern in self.TIME_SENSITIVE_PATTERNS)
+        text = self._normalize_for_match(user_input)
+
+        if any(re.search(pattern, text) for pattern in self.TIME_SENSITIVE_PATTERNS):
+            return True
+
+        for year in self.YEAR_PATTERN.findall(text):
+            if int(year) >= 2025:
+                return True
+
+        return False
 
     def get_context(self, user_input: str) -> RealtimeContext:
         if not self.should_search(user_input):
@@ -310,9 +341,10 @@ class GeminiReasoningSystem:
         import time
 
         start_time = time.time()
+        time_sensitive = self.realtime_search.should_search(user_input)
 
         # OTIMIZAÃƒâ€¡ÃƒÆ’O: Verifica cache primeiro
-        if not force_mode:
+        if not force_mode and not time_sensitive:
             cached = self.cache.get(user_input)
             if cached:
                 logger.info("Cache HIT! Retornando resposta cacheada")
@@ -324,7 +356,7 @@ class GeminiReasoningSystem:
         logger.info("Processando com modo: %s", mode.value)
 
         realtime_context = RealtimeContext()
-        if self.realtime_search.should_search(user_input):
+        if time_sensitive:
             try:
                 realtime_context = await asyncio.to_thread(
                     self.realtime_search.get_context,
@@ -339,15 +371,38 @@ class GeminiReasoningSystem:
                 logger.warning("Falha ao buscar contexto atualizado: %s", exc)
                 realtime_context = RealtimeContext()
 
+        if time_sensitive and not realtime_context.text:
+            result = self._build_unverified_realtime_result(user_input)
+            result.execution_time_ms = int((time.time() - start_time) * 1000)
+            logger.info(
+                "Sem contexto externo recente para consulta temporal. Retornando resposta nao verificada.",
+            )
+            try:
+                get_analytics().log_decision(
+                    user_input=user_input,
+                    selected_mode=mode,
+                    complexity_score=complexity_score,
+                    result=result,
+                )
+            except Exception as exc:
+                logger.debug("Falha ao registrar analytics: %s", exc)
+            return result
+
         if mode == ReasoningMode.VOICE_FAST:
             result = await self._fast_response(user_input, context, realtime_context)
         else:
             result = await self._deep_reasoning(user_input, context, realtime_context)
 
+        if time_sensitive:
+            result.text = self._enforce_temporal_output_contract(
+                result.text,
+                realtime_context.sources,
+            )
+
         result.execution_time_ms = int((time.time() - start_time) * 1000)
         
         # OTIMIZAÃƒâ€¡ÃƒÆ’O: Salva no cache
-        if not force_mode and result.confidence > 0.7:
+        if not force_mode and not time_sensitive and result.confidence > 0.7:
             self.cache.set(user_input, result)
 
         if realtime_context.sources:
@@ -376,6 +431,74 @@ class GeminiReasoningSystem:
         except Exception as exc:
             logger.debug("Falha ao registrar analytics: %s", exc)
         return result
+
+    def _build_unverified_realtime_result(self, user_input: str) -> ReasoningResult:
+        """Fallback quando pergunta temporal nao pode ser validada online."""
+        checked_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+        text = (
+            "Essa pergunta depende de informacao atualizada e eu nao consegui validar "
+            "fontes recentes agora.\n"
+            "Status: nao verificado.\n"
+            f"Data da verificacao: {checked_at}\n"
+            "Fontes: indisponiveis nesta tentativa.\n"
+            "Se quiser, tento novamente em instantes ou respondo apenas com fundamentos "
+            "sem afirmar fatos recentes."
+        )
+        return ReasoningResult(
+            mode=ReasoningMode.VOICE_FAST,
+            text=text,
+            thinking=None,
+            tools_used=[
+                {
+                    "type": "realtime_search",
+                    "status": "unavailable",
+                    "query": user_input,
+                }
+            ],
+            confidence=0.35,
+        )
+
+    def _enforce_temporal_output_contract(
+        self,
+        text: str,
+        sources: List[Dict[str, str]] | None,
+    ) -> str:
+        """Padroniza saida para respostas dependentes de recencia."""
+        cleaned_text = (text or "").strip()
+        checked_at = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+        has_sources = bool(sources)
+        status = "verificado" if has_sources else "nao verificado"
+
+        source_lines: List[str] = []
+        if has_sources:
+            source_lines.append("Fontes:")
+            for index, source in enumerate((sources or [])[:5], start=1):
+                title = (source.get("title") or "Fonte sem titulo").strip()
+                url = (source.get("url") or "").strip()
+                published = (source.get("published_at") or "sem data publica").strip()
+                line = f"{index}. {title} ({published})"
+                if url:
+                    line += f" - {url}"
+                source_lines.append(line)
+        else:
+            source_lines.append("Fontes: indisponiveis nesta tentativa.")
+
+        if (
+            "Status:" in cleaned_text
+            and "Data da verificacao:" in cleaned_text
+            and ("Fontes:" in cleaned_text or "Fontes: indisponiveis" in cleaned_text)
+        ):
+            return cleaned_text
+
+        contract_block = [
+            f"Status: {status}",
+            f"Data da verificacao: {checked_at}",
+            *source_lines,
+        ]
+
+        if cleaned_text:
+            return f"{cleaned_text}\n\n" + "\n".join(contract_block)
+        return "\n".join(contract_block)
 
     def _compute_complexity_score(self, user_input: str) -> int:
         """Calcula score de complexidade para decidir o modo."""
@@ -512,6 +635,7 @@ class GeminiReasoningSystem:
     ) -> str:
         """Monta prompt para resposta rapida."""
         from prompts import AGENT_INSTRUCTION
+        from temporal_context import build_temporal_guardrail
 
         realtime_block = ""
         if realtime_context.text:
@@ -519,10 +643,15 @@ class GeminiReasoningSystem:
                 "\n\n---\n"
                 f"{realtime_context.text}\n"
                 "Se houver conflito com memoria antiga, priorize o contexto atualizado.\n"
+                "FORMATO OBRIGATORIO PARA RESPOSTA TEMPORAL:\n"
+                "- Status: verificado ou nao verificado\n"
+                "- Data da verificacao: YYYY-MM-DD HH:MM:SS +TZ\n"
+                "- Fontes: lista numerada com titulo, data e link\n"
             )
 
         return f"""
 {AGENT_INSTRUCTION}
+{build_temporal_guardrail()}
 
 {context}
 {realtime_block}
@@ -542,6 +671,7 @@ Usuario: {user_input}
     ) -> str:
         """Monta prompt para raciocinio profundo."""
         from prompts import AGENT_INSTRUCTION
+        from temporal_context import build_temporal_guardrail
 
         realtime_block = ""
         if realtime_context.text:
@@ -549,10 +679,15 @@ Usuario: {user_input}
                 "\n\n---\n"
                 f"{realtime_context.text}\n"
                 "Use o contexto atualizado para fatos temporais e deixe isso claro na resposta.\n"
+                "FORMATO OBRIGATORIO PARA RESPOSTA TEMPORAL:\n"
+                "- Status: verificado ou nao verificado\n"
+                "- Data da verificacao: YYYY-MM-DD HH:MM:SS +TZ\n"
+                "- Fontes: lista numerada com titulo, data e link\n"
             )
 
         return f"""
 {AGENT_INSTRUCTION}
+{build_temporal_guardrail()}
 
 {context}
 {realtime_block}
